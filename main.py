@@ -5,7 +5,7 @@ appKey = "aaa"
 appSecret = "bbb"
 
 # 構建授權 URL
-authUrl = f'https://api.schwabapi.com/v1/oauth/authorize?client_id={appKey}&response_type=code&redirect_uri=https://developer.schwab.com/oauth2-redirect.html'
+authUrl = f'https://api.schwabapi.com/v1/oauth/authorize?response_type=code&client_id={appKey}&scope=readonly&redirect_uri=https://developer.schwab.com/oauth2-redirect.html'
 print(f"Click to authenticate: {authUrl}")
 
 # 提示用戶粘貼返回的 URL
