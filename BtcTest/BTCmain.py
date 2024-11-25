@@ -3,7 +3,7 @@ import time
 
 # 初始參數
 initial_capital = 1500
-num_positions = 30 #每一筆 50 USDT
+num_positions = 30 #每一筆50USDT
 symbol = 'BTCUSDT'
 
 strategy = initialize_strategy(initial_capital, num_positions)
