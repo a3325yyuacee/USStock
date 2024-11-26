@@ -51,26 +51,13 @@ else:
 
 # 使用 Access Token 請求用戶帳戶資訊
 base_url = "https://api.schwabapi.com/trader/v1/"
-headers = {'Authorization': f'Bearer {access_token}'}  # 更新為 Bearer 認證
+response = requests.get(f'{base_url}/accounts/accountNumbers', headers={'Authorization': f'Bearer {access_token}'})
 
-# 查詢帳戶資訊及持倉資訊
-response = requests.get(f'{base_url}/accounts', headers=headers)
-
-# 提取帳戶資訊
+# 打印帳戶資訊
 if response.status_code == 200:
-    accounts_data = response.json()
-    print("Accounts retrieved successfully:")
-    print(accounts_data)
-
-    # 從帳戶資訊中提取第一個帳戶號
-    if accounts_data and isinstance(accounts_data, list) and 'securitiesAccount' in accounts_data[0]:
-        account_number = accounts_data[0]['securitiesAccount']['accountNumber']
-        print(f"Using account number: {account_number}")
-    else:
-        print("No account number found in the response.")
-        exit(1)
+    print(response.json())
 else:
-    print(f"Error: Unable to fetch account information. Status code: {response.status_code}")
+    print(f"Error retrieving accounts and positions: {response.status_code}")
     print(response.text)
     exit(1)
 
