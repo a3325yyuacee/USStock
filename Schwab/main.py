@@ -3,8 +3,8 @@ import base64
 from urllib.parse import urlparse, parse_qs
 
 
-appKey = "test1"
-appSecret = "test2"
+appKey = "eTOdlULAGAECJta6idElCFNAnpomwdFt"
+appSecret = "6pEuGP4RMdMI8R4R"
 
 # OAuth 授權 URL
 authUrl = f'https://api.schwabapi.com/v1/oauth/authorize?client_id={appKey}&redirect_uri=https://127.0.0.1'
@@ -51,11 +51,58 @@ else:
 
 # 使用 Access Token 請求用戶帳戶資訊
 base_url = "https://api.schwabapi.com/trader/v1/"
-response = requests.get(f'{base_url}/accounts/accountNumbers', headers={'Authorization': f'Bearer {access_token}'})
+headers = {'Authorization': f'Bearer {access_token}'}  # 更新為 Bearer 認證
 
-# 打印帳戶資訊
+# 查詢帳戶資訊及持倉資訊
+response = requests.get(f'{base_url}/accounts', headers=headers)
+
+# 提取帳戶資訊
 if response.status_code == 200:
-    print(response.json())
+    accounts_data = response.json()
+    print("Accounts retrieved successfully:")
+    print(accounts_data)
+
+    # 從帳戶資訊中提取第一個帳戶號
+    if accounts_data and isinstance(accounts_data, list) and 'securitiesAccount' in accounts_data[0]:
+        account_number = accounts_data[0]['securitiesAccount']['accountNumber']
+        print(f"Using account number: {account_number}")
+    else:
+        print("No account number found in the response.")
+        exit(1)
 else:
     print(f"Error: Unable to fetch account information. Status code: {response.status_code}")
     print(response.text)
+    exit(1)
+
+# 下單功能
+# 構建下單的 JSON 請求結構
+order_payload = {
+    "session": "NORMAL",              # 訂單執行會話類型
+    "duration": "DAY",                # 訂單有效期，"DAY" 表示當日有效
+    "orderType": "MARKET",            # 訂單類型（市價單）
+    "orderLegCollection": [
+        {
+            "orderLegType": "EQUITY",  # 資產類型（股票）
+            "instrument": {
+                "symbol": "AAPL",      # 股票代碼
+                "type": "EQUITY"       # 資產類型
+            },
+            "instruction": "BUY",      # 動作（買入）
+            "positionEffect": "OPENING", # 開倉
+            "quantity": 1             # 買入數量，必須大於零
+        }
+    ],
+    "orderStrategyType": "SINGLE"     # 單一訂單
+}
+
+print("Placing order...")
+response = requests.post(f"{base_url}/accounts/{account_number}/orders", headers=headers, json=order_payload)
+
+# 處理下單回應
+if response.status_code == 201:
+    print("Order placed successfully.")
+    print("Order details:")
+    print(response.headers.get('Location'))  # 回應的 Header 包含新訂單的連結
+else:
+    print(f"Failed to place order. Status code: {response.status_code}")
+    print(response.json())  # 打印錯誤資訊
