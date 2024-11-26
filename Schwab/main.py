@@ -3,8 +3,8 @@ import base64
 from urllib.parse import urlparse, parse_qs
 
 
-appKey = "eTOdlULAGAECJta6idElCFNAnpomwdFt"
-appSecret = "6pEuGP4RMdMI8R4R"
+appKey = "test"
+appSecret = "test"
 
 # OAuth 授權 URL
 authUrl = f'https://api.schwabapi.com/v1/oauth/authorize?client_id={appKey}&redirect_uri=https://127.0.0.1'
