@@ -1,5 +1,7 @@
 import requests
 import json
+from auth import get_valid_access_token
+
 
 def get_account_hash(base_url, headers):
     """
@@ -16,23 +18,23 @@ def get_account_hash(base_url, headers):
         print(response.text)
         exit(1)
 
-def place_order(base_url, account_hash, headers, symbol, quantity, price):
+def place_order(base_url, headers, account_hash, symbol, quantity, price):
     """
     下單功能
     """
     order = {
-        "orderType": "LIMIT",
-        "session": "NORMAL",
-        "duration": "DAY",
-        "orderStrategyType": "SINGLE",
-        "price": str(price),
+        "orderType": "LIMIT",                # 限價單
+        "session": "NORMAL",                 # 常規交易時段
+        "duration": "DAY",                   # 當日有效
+        "orderStrategyType": "SINGLE",       # 單筆交易
+        "price": str(price),                 # 下單價格
         "orderLegCollection": [
             {
-                "instruction": "BUY",
-                "quantity": quantity,
+                "instruction": "BUY",        # 買入
+                "quantity": quantity,        # 買入數量
                 "instrument": {
-                    "symbol": symbol,
-                    "assetType": "EQUITY"
+                    "symbol": symbol,        # 股票代號
+                    "assetType": "EQUITY"    # 資產類型
                 }
             }
         ]
@@ -55,19 +57,17 @@ def place_order(base_url, account_hash, headers, symbol, quantity, price):
         exit(1)
 
 if __name__ == "__main__":
-    # 從 tokens.json 中讀取 access_token
-    with open("tokens.json", "r") as f:
-        tokens = json.load(f)
-
-    access_token = tokens['access_token']
+    # 設置基礎 URL 和取得有效的 access_token
     base_url = "https://api.schwabapi.com/trader/v1/"
+    access_token = get_valid_access_token()
     headers = {'Authorization': f'Bearer {access_token}'}
 
-    # 取得加密帳號
+    # 查詢帳戶的加密哈希值
     account_hash = get_account_hash(base_url, headers)
+    print(f"帳戶加密哈希值：{account_hash}")
 
-    # 執行下單
-    symbol = "TSLA"
-    quantity = 5
-    price = 200.00
-    place_order(base_url, account_hash, headers, symbol, quantity, price)
+    # 執行下單操作
+    symbol = "TSLA"      # 股票代號
+    quantity = 5         # 下單數量
+    price = 200.00       # 每股價格
+    place_order(base_url, headers, account_hash, symbol, quantity, price)

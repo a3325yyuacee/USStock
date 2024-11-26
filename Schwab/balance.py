@@ -1,5 +1,7 @@
 import requests
 import json
+from auth import get_valid_access_token
+
 
 
 def get_account_positions(base_url, headers):
@@ -50,12 +52,7 @@ def get_account_positions(base_url, headers):
 
 
 if __name__ == "__main__":
-    # 從 tokens.json 中讀取 access_token
-    with open("tokens.json", "r") as f:
-        tokens = json.load(f)
-
-    access_token = tokens['access_token']
     base_url = "https://api.schwabapi.com/trader/v1/"
+    access_token = get_valid_access_token()
     headers = {'Authorization': f'Bearer {access_token}'}
-
     get_account_positions(base_url, headers)
