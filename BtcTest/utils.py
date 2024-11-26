@@ -5,8 +5,8 @@ from binance.enums import *
 import math
 
 # 初始化幣安客戶端
-api_key = 'C69oTTNh7cUyoJqdtKnOST9yzUQKLzH7vCNLEha4215KlTZee82faqdKffrlGLfL'
-api_secret = 'RMSBk3St1OuT7Sr7Bki0cflekQiPlPfNVLTc8cG3xNhAsZ6XMCfwbFHTtVZiaubl'
+api_key = 'test'
+api_secret = 'test'
 client = Client(api_key, api_secret)
 
 def fetch_current_price(symbol='BTCUSDT'):
