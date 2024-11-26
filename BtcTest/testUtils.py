@@ -1,4 +1,3 @@
-# testUtils.py
 
 import pandas as pd
 from testUtils import initialize_strategy, check_buy_conditions, check_stop_loss
