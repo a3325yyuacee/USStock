@@ -2,10 +2,17 @@ import requests
 import base64
 from urllib.parse import urlparse, parse_qs
 
+from dotenv import load_dotenv
+import os
 
-appKey = "test"
-appSecret = "test"
+load_dotenv()
 
+appKey = os.getenv("APP_KEY")
+appSecret = os.getenv("APP_SECRET")
+
+if not appKey or not appSecret:
+    raise ValueError("APP_KEY or APP_SECRET is not set in .env file")
+    
 # OAuth 授權 URL
 authUrl = f'https://api.schwabapi.com/v1/oauth/authorize?client_id={appKey}&redirect_uri=https://127.0.0.1'
 
