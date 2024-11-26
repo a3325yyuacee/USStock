@@ -13,6 +13,7 @@ appSecret = os.getenv("APP_SECRET")
 if not appKey or not appSecret:
     raise ValueError("APP_KEY or APP_SECRET is not set in .env file")
     
+
 # OAuth 授權 URL
 authUrl = f'https://api.schwabapi.com/v1/oauth/authorize?client_id={appKey}&redirect_uri=https://127.0.0.1'
 
@@ -56,47 +57,32 @@ else:
     print(response.text)
     exit(1)
 
-# 使用 Access Token 請求用戶帳戶資訊
+# 使用 Access Token 查詢帳戶和持倉資訊
 base_url = "https://api.schwabapi.com/trader/v1/"
-response = requests.get(f'{base_url}/accounts/accountNumbers', headers={'Authorization': f'Bearer {access_token}'})
+headers = {'Authorization': f'Bearer {access_token}'}  # 使用 Bearer 認證
 
-# 打印帳戶資訊
+# 查詢帳戶資訊及持倉資訊
+params = {'fields': 'positions'}  # 添加查詢參數以獲取持倉
+response = requests.get(f'{base_url}/accounts', headers=headers, params=params)
+
+# 檢查回應並解析數據
 if response.status_code == 200:
-    print(response.json())
+    accounts_data = response.json()
+    print("Accounts and positions retrieved successfully:")
+    for account in accounts_data:
+        account_info = account.get('securitiesAccount', {})
+        account_number = account_info.get('accountNumber')
+        positions = account_info.get('positions', [])
+        print(f"帳號: {account_number}")
+        if positions:
+            print("Positions:")
+            for position in positions:
+                symbol = position['instrument'].get('symbol', 'N/A')
+                quantity = position.get('longQuantity', 0)
+                market_value = position.get('marketValue', 0)
+                print(f"  股票代號: {symbol}, 股票數量: {quantity}, 股票市值: {market_value}")
+        else:
+            print("  No positions found for this account.")
 else:
     print(f"Error retrieving accounts and positions: {response.status_code}")
     print(response.text)
-    exit(1)
-
-# 下單功能
-# 構建下單的 JSON 請求結構
-order_payload = {
-    "session": "NORMAL",              # 訂單執行會話類型
-    "duration": "DAY",                # 訂單有效期，"DAY" 表示當日有效
-    "orderType": "MARKET",            # 訂單類型（市價單）
-    "orderLegCollection": [
-        {
-            "orderLegType": "EQUITY",  # 資產類型（股票）
-            "instrument": {
-                "symbol": "AAPL",      # 股票代碼
-                "type": "EQUITY"       # 資產類型
-            },
-            "instruction": "BUY",      # 動作（買入）
-            "positionEffect": "OPENING", # 開倉
-            "quantity": 1             # 買入數量，必須大於零
-        }
-    ],
-    "orderStrategyType": "SINGLE"     # 單一訂單
-}
-
-print("Placing order...")
-response = requests.post(f"{base_url}/accounts/{account_number}/orders", headers=headers, json=order_payload)
-
-# 處理下單回應
-if response.status_code == 201:
-    print("Order placed successfully.")
-    print("Order details:")
-    print(response.headers.get('Location'))  # 回應的 Header 包含新訂單的連結
-else:
-    print(f"Failed to place order. Status code: {response.status_code}")
-    print(response.json())  # 打印錯誤資訊
