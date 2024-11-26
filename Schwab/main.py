@@ -3,8 +3,8 @@ import base64
 from urllib.parse import urlparse, parse_qs
 
 
-appKey = "test1"
-appSecret = "test2"
+appKey = "test"
+appSecret = "test"
 
 # OAuth 授權 URL
 authUrl = f'https://api.schwabapi.com/v1/oauth/authorize?client_id={appKey}&redirect_uri=https://127.0.0.1'
@@ -51,11 +51,30 @@ else:
 
 # 使用 Access Token 請求用戶帳戶資訊
 base_url = "https://api.schwabapi.com/trader/v1/"
-response = requests.get(f'{base_url}/accounts/accountNumbers', headers={'Authorization': f'Bearer {access_token}'})
+headers = {'Authorization': f'Bearer {access_token}'}  # 更新為 Bearer 認證
 
-# 打印帳戶資訊
+# 查詢帳戶資訊及持倉資訊
+params = {'fields': 'positions'}  # 添加查詢參數以獲取持倉
+response = requests.get(f'{base_url}/accounts', headers=headers, params=params)
+
+# 檢查回應並解析數據
 if response.status_code == 200:
-    print(response.json())
+    accounts_data = response.json()
+    print("Accounts and positions retrieved successfully:")
+    for account in accounts_data:
+        account_info = account.get('securitiesAccount', {})
+        account_number = account_info.get('accountNumber')
+        positions = account_info.get('positions', [])
+        print(f"Account Number: {account_number}")
+        if positions:
+            print("Positions:")
+            for position in positions:
+                symbol = position['instrument'].get('symbol', 'N/A')
+                quantity = position.get('longQuantity', 0)
+                market_value = position.get('marketValue', 0)
+                print(f"  Symbol: {symbol}, Quantity: {quantity}, Market Value: {market_value}")
+        else:
+            print("  No positions found for this account.")
 else:
-    print(f"Error: Unable to fetch account information. Status code: {response.status_code}")
+    print(f"Error retrieving accounts and positions: {response.status_code}")
     print(response.text)
