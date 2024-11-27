@@ -96,17 +96,9 @@ def get_all_orders(base_url, headers, max_results=100, status=None, from_date=No
     """
     查詢所有帳戶的訂單，支援多種篩選條件
     """
-    # 預設查詢時間範圍為最近 7 天
-    if not from_date:
-        from_date = (datetime.utcnow() - timedelta(days=7)).strftime('%Y-%m-%dT00:00:00.000Z')
-    else:
-        from_date = f"{from_date}T00:00:00.000Z"  # 自動補全起始時間
-    if not to_date:
-        to_date = datetime.utcnow().strftime('%Y-%m-%dT23:59:59.999Z')
-    else:
-        to_date = f"{to_date}T23:59:59.999Z"  # 自動補全結束時間
+    from_date = format_date(from_date)
+    to_date = format_date(to_date)
 
-    # 建立請求參數
     params = {
         "maxResults": max_results,
         "fromEnteredTime": from_date,
@@ -115,7 +107,6 @@ def get_all_orders(base_url, headers, max_results=100, status=None, from_date=No
     if status:
         params["status"] = status
 
-    # 發送請求
     response = requests.get(
         f"{base_url}/orders",
         headers=headers,
@@ -124,37 +115,30 @@ def get_all_orders(base_url, headers, max_results=100, status=None, from_date=No
 
     if response.status_code == 200:
         orders = response.json()
-        print("\n所有訂單：")
-        filtered_orders = []
-        for order in orders:
-            # 進一步篩選（如股票代號、數量範圍）
-            order_symbol = order['orderLegCollection'][0]['instrument']['symbol']
-            order_qty = order.get('quantity', 0)
+        if not orders:
+            print("查詢條件下無符合的訂單。請嘗試調整條件。")
+            return []
 
+        print("\n所有訂單：")
+        for order in orders:
+            # 進一步篩選和打印訂單
+            order_symbol = order['orderLegCollection'][0]['instrument']['symbol']
             if symbol and order_symbol != symbol:
                 continue
-            if min_qty and order_qty < min_qty:
-                continue
-            if max_qty and order_qty > max_qty:
-                continue
 
-            # 打印符合條件的訂單
             print(f"訂單編號：{order.get('orderId')}")
             print(f"狀態：{order.get('status')}")
             print(f"股票代號：{order_symbol}")
-            print(f"買入/賣出：{order['orderLegCollection'][0]['instruction']}")
-            print(f"數量：{order_qty}")
+            print(f"數量：{order.get('quantity')}")
             print(f"價格：{order.get('price')}")
             print(f"進入時間：{order.get('enteredTime')}")
             print(f"狀態描述：{order.get('statusDescription')}")
             print("-" * 40)
-            filtered_orders.append(order)
-
-        return filtered_orders
+        return orders
     else:
         print("查詢全部訂單失敗")
         print(response.text)
-        exit(1)
+        return []
 
 
 
