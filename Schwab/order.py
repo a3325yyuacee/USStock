@@ -11,7 +11,7 @@ def get_account_hash(base_url, headers):
     if response.status_code == 200:
         linked_accounts = response.json()
         print("已成功取得加密帳號：")
-        print(json.dumps(linked_accounts, indent=4))
+        # print(json.dumps(linked_accounts, indent=4))
         return linked_accounts[0].get('hashValue')
     else:
         print("無法取得加密帳號")
@@ -64,10 +64,20 @@ if __name__ == "__main__":
 
     # 查詢帳戶的加密哈希值
     account_hash = get_account_hash(base_url, headers)
-    print(f"帳戶加密哈希值：{account_hash}")
+    # print(f"帳戶加密哈希值：{account_hash}")
 
-    # 執行下單操作
-    symbol = "TSLA"      # 股票代號
-    quantity = 5         # 下單數量
-    price = 200.00       # 每股價格
+     # 從使用者取得輸入
+    print("請輸入下單條件：")
+    symbol = input("股票代號：")
+    try:
+        quantity = int(input("買入數量："))
+    except ValueError:
+        print("買入數量應為整數，請重新執行程式")
+        exit(1)
+    try:
+        price = float(input("下單價格："))
+    except ValueError:
+        print("下單價格應為數字，請重新執行程式")
+        exit(1)
+
     place_order(base_url, headers, account_hash, symbol, quantity, price)
