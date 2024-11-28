@@ -1,8 +1,9 @@
 import requests
 import time
 import os
-from datetime import datetime
-from auth import get_valid_access_token
+from datetime import datetime, timedelta
+from auth import get_valid_access_token, refresh_access_token
+
 
 def clear_console():
     """
@@ -72,7 +73,7 @@ def display_positions_with_prices(base_url, headers, finnhub_api_key):
                         results.append(f"    市值: ${market_value:,.2f}")
             else:
                 results.append("  此帳戶無持倉。")
-        
+
         clear_console()
         print("帳戶及持倉資訊如下：")
         print("\n".join(results))
@@ -93,14 +94,28 @@ if __name__ == "__main__":
         exit(1)
 
     base_url = "https://api.schwabapi.com/trader/v1/"
-    access_token = get_valid_access_token()
+    access_token = get_valid_access_token()  # 使用原本的方式獲取 Access Token
     headers = {'Authorization': f'Bearer {access_token}'}
+    token_expiry = datetime.now() + timedelta(minutes=30)  # 假設 Token 有效期為 30 分鐘
 
     try:
         while True:
+            # 如果 Token 即將過期，刷新 Token
+            if datetime.now() >= token_expiry:
+                print("Access Token 即將過期，正在刷新...")
+                access_token = get_valid_access_token()  # 重新調用你的函數
+                if access_token:
+                    headers = {'Authorization': f'Bearer {access_token}'}
+                    token_expiry = datetime.now() + timedelta(minutes=30)
+                    print("Access Token 刷新成功。")
+                else:
+                    print("刷新 Access Token 失敗，請檢查憑證或網絡連線。")
+                    break
+
+            # 執行查詢和更新
             print("更新持倉及當前股價中...")
             display_positions_with_prices(base_url, headers, finnhub_api_key)
-            print("\n下一次更新將在 10 秒後...")
-            time.sleep(10)
+            print("\n下一次更新將在 30 秒後...")
+            time.sleep(30)
     except KeyboardInterrupt:
         print("\n程序已手動中止。")
