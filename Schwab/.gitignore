@@ -1,3 +1,5 @@
 .env
 /venv
 tokens.json
+.idea/
+*.iml
