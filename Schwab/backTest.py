@@ -127,6 +127,6 @@ if __name__ == "__main__":
     
     # 輸出結果
     print(f"Final cash balance: ${final_cash:.2f}")
-    print(f"Total return: {((final_cash - INITIAL_CASH) / INITIAL_CASH) * 100:.2f}%")
-    print(f"Annualized return: {annualized_return:.2f}%")
+    print(f"總報酬率: {((final_cash - INITIAL_CASH) / INITIAL_CASH) * 100:.2f}%")
+    print(f"年化報酬率: {annualized_return:.2f}%")
     print("Backtest completed.")
