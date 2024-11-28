@@ -1,6 +1,7 @@
 import requests
 import time
 import os
+from tabulate import tabulate
 from datetime import datetime, timedelta
 from auth import get_valid_access_token, refresh_access_token
 
@@ -34,53 +35,75 @@ def get_stock_price(api_key, symbol):
 
 def display_positions_with_prices(base_url, headers, finnhub_api_key):
     """
-    查詢帳戶持倉及股票當前價格，並顯示結果
+    查詢帳戶持倉及股票當前價格，計算總市值和每隻股票的獲利百分比，並以表格形式輸出
     """
     params = {'fields': 'positions'}
     response = requests.get(f'{base_url}/accounts', headers=headers, params=params)
 
     if response.status_code == 200:
         accounts_data = response.json()
-        results = []  # 暫存結果
+        total_market_value = 0  # 初始化總市值
+        account_results = []  # 暫存每個帳戶的總市值資訊
 
         for account in accounts_data:
             account_info = account.get('securitiesAccount', {})
             account_number = account_info.get('accountNumber', '未知帳號')
             cash_balance = account_info.get('currentBalances', {}).get('cashBalance', 0.0)
 
-            results.append(f"\n帳號: {account_number}")
-            results.append(f"現金餘額: ${cash_balance:,.2f}")
+            print(f"\n帳號: {account_number}")
+            print(f"現金餘額: ${cash_balance:,.2f}")
 
             positions = account_info.get('positions', [])
+            account_market_value = cash_balance  # 每個帳戶的總市值
+            table_data = []  # 用於存儲表格資料
+
             if positions:
-                results.append("持倉：")
                 for position in positions:
                     symbol = position['instrument'].get('symbol', '未知股票')
                     quantity = position.get('longQuantity', 0.0)
-                    market_value = position.get('marketValue', 0.0)
+                    cost_price = position.get('averagePrice', 0.0)  # 持倉的平均成本價
                     current_price = get_stock_price(finnhub_api_key, symbol)
 
                     if current_price is not None:
                         current_market_value = quantity * current_price
-                        results.append(f"  股票代號: {symbol}")
-                        results.append(f"    持股數量: {quantity}")
-                        results.append(f"    當前股價: ${current_price:,.2f}")
-                        results.append(f"    市值: ${current_market_value:,.2f}")
-                    else:
-                        results.append(f"  股票代號: {symbol}")
-                        results.append(f"    持股數量: {quantity}")
-                        results.append("    當前股價: 無法獲取")
-                        results.append(f"    市值: ${market_value:,.2f}")
-            else:
-                results.append("  此帳戶無持倉。")
+                        profit_percent = ((current_price - cost_price) / cost_price) * 100 if cost_price > 0 else 0
 
-        clear_console()
-        print("帳戶及持倉資訊如下：")
-        print("\n".join(results))
+                        account_market_value += current_market_value
+                        table_data.append([
+                            symbol, quantity, f"${cost_price:,.2f}", f"${current_price:,.2f}",
+                            f"${current_market_value:,.2f}", f"{profit_percent:.2f}%"
+                        ])
+                    else:
+                        table_data.append([
+                            symbol, quantity, f"${cost_price:,.2f}", "無法獲取", "未知", "未知"
+                        ])
+                # 打印表格
+                print(tabulate(
+                    table_data,
+                    headers=["股票代號", "持股數量", "成本價", "當前股價", "市值", "獲利百分比"],
+                    tablefmt="grid"
+                ))
+            else:
+                print("  此帳戶無持倉。")
+
+            # 累計總市值
+            total_market_value += account_market_value
+            account_results.append([account_number, f"${cash_balance:,.2f}", f"${account_market_value:,.2f}"])
+
+        # 打印帳戶總市值
+        print("\n所有帳戶總市值：")
+        print(tabulate(
+            account_results,
+            headers=["帳號", "現金餘額", "帳戶總市值"],
+            tablefmt="grid"
+        ))
+        print(f"\n整體帳戶總市值：${total_market_value:,.2f}")
+
     else:
         print("查詢帳戶及持倉失敗")
         print(f"錯誤代碼: {response.status_code}")
         print(response.text)
+
 
 
 if __name__ == "__main__":
