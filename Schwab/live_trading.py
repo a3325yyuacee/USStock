@@ -28,13 +28,18 @@ SIMULATED = False  # 模擬交易開關
 # 初始化交易次數
 trade_count = 0
 
-def log_to_file(message):
-    """將日誌記錄到文件中，同時輸出到控制台。"""
+def log_to_file(message, log_type="INFO"):
+    """
+    改進的日誌記錄函數。
+    :param message: 日誌消息
+    :param log_type: 日誌類型，例如 "INFO", "ERROR", "TRADE"
+    """
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    formatted_message = f"[{timestamp}] {message}"
+    formatted_message = f"[{timestamp}] [{log_type}] {message}"
     with open("trade_log.txt", "a") as log_file:
         log_file.write(formatted_message + "\n")
     print(formatted_message)
+
 
 def get_stock_price(api_key, symbol):
     """
@@ -52,6 +57,22 @@ def get_stock_price(api_key, symbol):
         print(f"查詢 {symbol} 價格時發生錯誤: {e}")
         return None
 
+def is_valid_price(current_price, entry_price=None, max_multiplier=10):
+    """
+    檢查價格是否在合理範圍內：
+    - 價格應為正數。
+    - 價格不應超過平均成本的 max_multiplier 倍（默認 10 倍）。
+
+    :param current_price: 當前價格
+    :param entry_price: 平均成本價（可選）
+    :param max_multiplier: 平均成本價的最大倍數
+    :return: True 表示價格有效，False 表示價格異常
+    """
+    if current_price <= 0:
+        return False
+    if entry_price and current_price > entry_price * max_multiplier:
+        return False
+    return True
 
 def get_positions_and_cash(base_url, headers, finnhub_api_key):
     """
@@ -87,38 +108,10 @@ def get_positions_and_cash(base_url, headers, finnhub_api_key):
                         "profit_percent": ((current_price - average_price) / average_price * 100) if average_price > 0 else None
                     })
 
+        log_to_file(f"成功獲取帳戶數據: 現金餘額 ${total_cash_balance:.2f}, 持倉數量 {len(holdings)}")
         return total_cash_balance, holdings
     else:
-        print("查詢帳戶及持倉失敗")
-        print(f"錯誤代碼: {response.status_code}")
-        print(response.text)
-        return 0.0, []
-
-def get_account_cash_and_holdings(base_url, headers):
-    """查詢帳戶現金餘額和持倉資料。"""
-    url = f"{base_url}/accounts"
-    try:
-        response = requests.get(url, headers=headers)
-        response.raise_for_status()
-        accounts_data = response.json()
-        total_cash_balance = 0.0
-        holdings = []
-
-        for account in accounts_data:
-            account_info = account.get('securitiesAccount', {})
-            cash_balance = account_info.get('currentBalances', {}).get('cashBalance', 0.0)
-            total_cash_balance += cash_balance
-            account_holdings = account_info.get('positions', [])
-            for position in account_holdings:
-                holdings.append({
-                    "symbol": position['instrument'].get('symbol', '未知股票'),
-                    "quantity": position.get('longQuantity', 0),
-                    "average_price": position.get('averagePrice', 0.0),
-                })
-
-        return total_cash_balance, holdings
-    except requests.exceptions.RequestException as e:
-        log_to_file(f"查詢帳戶資料時發生錯誤: {e}")
+        log_to_file(f"查詢帳戶及持倉失敗，錯誤代碼: {response.status_code}, 錯誤信息: {response.text}", "ERROR")
         return 0.0, []
 
 def place_order_simulated(base_url, headers, account_hash, symbol, quantity, price):
@@ -140,7 +133,7 @@ def can_execute_trade(required_cash, cash_balance, trade_count):
     return True
 
 def live_trade_strategy(base_url, headers, account_hash, finnhub_api_key, symbol):
-    """基於即時更新的持倉和現金數據進行交易。"""
+    """實時交易策略，加入異常價格檢查。"""
     global trade_count
     log_to_file("實時交易策略啟動，開始監控價格變動。")
     try:
@@ -156,10 +149,16 @@ def live_trade_strategy(base_url, headers, account_hash, finnhub_api_key, symbol
                 time.sleep(30)
                 continue
 
+            # 異常價格檢查
+            symbol_holdings = next((h for h in holdings if h['symbol'].lower() == symbol.lower()), None)
+            if not is_valid_price(current_price, entry_price=symbol_holdings['average_price'] if symbol_holdings else None):
+                log_to_file(f"檢測到異常價格: {current_price}，跳過此次檢查。")
+                time.sleep(30)
+                continue
+
             log_to_file(f"檢查價格: {symbol}, 當前價格 ${current_price:.2f}")
 
             # 檢查是否有目標股票的持倉
-            symbol_holdings = next((h for h in holdings if h['symbol'].lower() == symbol.lower()), None)
             if symbol_holdings:
                 # log_to_file(f"檢測到持倉: {symbol_holdings}")
                 quantity = symbol_holdings['quantity']
@@ -198,9 +197,29 @@ def live_trade_strategy(base_url, headers, account_hash, finnhub_api_key, symbol
         log_to_file("交易策略手動終止。")
         # log_to_file(f"最終現金餘額 ${cash:.2f}, 最終持倉: {holdings}")
 
+def send_telegram_notification(message, bot_token, chat_id, log_type="INFO"):
+    """
+    使用 Telegram 發送通知，並記錄到日誌。
+    :param message: 發送的消息內容
+    :param bot_token: Telegram Bot 的 API Token
+    :param chat_id: 接收消息的聊天 ID
+    :param log_type: 日誌類型，例如 "INFO", "ERROR", "TRADE"
+    """
+    url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+    data = {"chat_id": chat_id, "text": message}
+    try:
+        response = requests.post(url, data=data)
+        response.raise_for_status()
+        log_to_file(f"通知已發送: {message}", log_type)
+    except requests.exceptions.RequestException as e:
+        log_to_file(f"通知發送失敗: {e}", "ERROR")
+
 if __name__ == "__main__":
+
     # 確保環境變量設置正確
     load_dotenv()
+    bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
+    chat_id = os.getenv("TELEGRAM_CHAT_ID")
     FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY")
     if not FINNHUB_API_KEY:
         print("錯誤: 未配置 FINNHUB_API_KEY")
@@ -210,6 +229,9 @@ if __name__ == "__main__":
     access_token = get_valid_access_token()
     headers = {'Authorization': f'Bearer {access_token}'}
     account_hash = get_account_hash(base_url, headers)  # 獲取帳戶標識
+
+    # 初始化
+    send_telegram_notification("交易腳本已啟動", bot_token, chat_id)
 
     # 使用新的函數初始化現金和持倉數據
     print("初始化帳戶數據...")
