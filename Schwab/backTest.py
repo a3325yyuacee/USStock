@@ -86,7 +86,7 @@ def backtest_strategy(data):
         # 檢查是否可以加碼
         if cash >= BUY_AMOUNT:
             # 調整目標價邏輯
-            target_price = entry_price * 1.02 if entry_price > 0 else current_price * 1.02
+            target_price = entry_price * 1.05 if entry_price > 0 else current_price * 1.05
             
             if current_price >= target_price:
                 shares_to_buy = BUY_AMOUNT / current_price
