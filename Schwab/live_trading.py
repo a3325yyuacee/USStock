@@ -1,7 +1,7 @@
 import requests
 import time
 import math
-from datetime import datetime
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
 import os
 
@@ -27,6 +27,9 @@ SIMULATED = False  # 模擬交易開關
 
 # 初始化交易次數
 trade_count = 0
+# 初始化 Token 過期時間
+token_expiry = datetime.now() + timedelta(minutes=30)
+
 
 def log_to_file(message, log_type="INFO"):
     """
@@ -133,15 +136,23 @@ def can_execute_trade(required_cash, cash_balance, trade_count):
     return True
 
 def live_trade_strategy(base_url, headers, account_hash, finnhub_api_key, symbol):
-    """實時交易策略，加入異常價格檢查。"""
+    """實時交易策略，根據市值動態切換固定止損與移動止損。"""
     global trade_count
     log_to_file("實時交易策略啟動，開始監控價格變動。")
+
     try:
+        # 初始化變數
+        highest_price = 0  # 記錄股票的最高價
+        stop_loss_price = 0  # 當前止損點
+        use_moving_stop_loss = False  # 是否使用移動止損
+        
         while True:
+            # 自動刷新 Token
+            refresh_access_token_periodically(headers)
+            
             # 每次檢查都更新最新現金和持倉數據
             cash, holdings = get_positions_and_cash(base_url, headers, finnhub_api_key)
             log_to_file(f"更新後的現金餘額: ${cash:.2f}")
-            # log_to_file(f"持倉數據: {holdings}")
 
             current_price = get_stock_price(finnhub_api_key, symbol)
             if current_price is None:
@@ -149,53 +160,54 @@ def live_trade_strategy(base_url, headers, account_hash, finnhub_api_key, symbol
                 time.sleep(30)
                 continue
 
-            # 異常價格檢查
-            symbol_holdings = next((h for h in holdings if h['symbol'].lower() == symbol.lower()), None)
-            if not is_valid_price(current_price, entry_price=symbol_holdings['average_price'] if symbol_holdings else None):
-                log_to_file(f"檢測到異常價格: {current_price}，跳過此次檢查。")
-                time.sleep(30)
-                continue
-
-            log_to_file(f"檢查價格: {symbol}, 當前價格 ${current_price:.2f}")
-
             # 檢查是否有目標股票的持倉
+            symbol_holdings = next((h for h in holdings if h['symbol'].lower() == symbol.lower()), None)
             if symbol_holdings:
-                # log_to_file(f"檢測到持倉: {symbol_holdings}")
                 quantity = symbol_holdings['quantity']
                 entry_price = symbol_holdings['average_price']
-                stop_loss_price = entry_price - (STOP_LOSS / quantity)
-                target_price = entry_price * 1.05
+                current_market_value = current_price * quantity  # 計算市值
+                
+                # 判斷是否切換為移動止損
+                if current_market_value > 1000 and not use_moving_stop_loss:
+                    use_moving_stop_loss = True
+                    log_to_file(f"市值超過 $1000，切換至移動止損模式。")
+                
+                # 更新止損點
+                if use_moving_stop_loss:
+                    # 移動止損點邏輯
+                    if current_price > highest_price:
+                        highest_price = current_price
+                        stop_loss_price = highest_price * 0.9  # 移動止損點為最高價的 90%
+                        log_to_file(f"新高價: ${highest_price:.2f}，止損點更新為: ${stop_loss_price:.2f}")
+                else:
+                    # 固定止損點邏輯
+                    stop_loss_price = entry_price - (500 / quantity)
+                    log_to_file(f"固定止損點設定為: ${stop_loss_price:.2f}")
 
-                # 加碼邏輯
-                if current_price >= target_price:
-                    shares_to_buy = math.ceil(BUY_AMOUNT / current_price)
-                    required_cash = shares_to_buy * current_price
-
-                    if can_execute_trade(required_cash, cash, trade_count):
-                        log_to_file(f"觸發加碼條件: 當前價格 ${current_price:.2f}, 買入 {shares_to_buy} 股")
-                        place_order_simulated(base_url, headers, account_hash, symbol, shares_to_buy, current_price)
-                        trade_count += 1
-                        cash -= required_cash
-                        quantity += shares_to_buy
-                        entry_price = ((entry_price * (quantity - shares_to_buy)) + (current_price * shares_to_buy)) / quantity
-                        log_to_file(f"加碼完成: 持倉 {quantity} 股, 平均成本 ${entry_price:.2f}, 現金餘額 ${cash:.2f}")
-                    else:
-                        log_to_file("加碼條件滿足，但交易條件不符。")
-
-                # 止損邏輯
-                elif current_price <= stop_loss_price:
-                    log_to_file(f"觸發止損條件: 當前價格 ${current_price:.2f}, 賣出 {quantity} 股")
+                # 檢查止損條件
+                if current_price <= stop_loss_price:
+                    log_to_file(f"觸發止損條件: 當前價格 ${current_price:.2f} <= 止損點 ${stop_loss_price:.2f}")
                     place_order_simulated(base_url, headers, account_hash, symbol, -quantity, current_price)
                     cash += quantity * current_price
                     holdings.remove(symbol_holdings)
                     log_to_file(f"止損完成: 當前現金餘額 ${cash:.2f}")
+                    send_telegram_notification(f"止損觸發：賣出 {quantity} 股 {symbol}，價格 ${current_price:.2f}", bot_token, chat_id, "TRADE")
+                    break  # 停止策略執行，因為持倉已清空
+
+            else:
+                # 無持倉情況，跳過
+                log_to_file(f"未找到 {symbol} 的持倉數據，跳過此次檢查。")
+                time.sleep(30)
+                continue
 
             log_to_file("等待 30 秒進行下一次檢查...")
             time.sleep(30)
 
     except KeyboardInterrupt:
         log_to_file("交易策略手動終止。")
-        # log_to_file(f"最終現金餘額 ${cash:.2f}, 最終持倉: {holdings}")
+        log_to_file(f"最終現金餘額: ${cash:.2f}, 最終持倉: {holdings}")
+        send_telegram_notification(f"交易策略終止：現金餘額 ${cash:.2f}，持倉數量 {len(holdings)}", bot_token, chat_id, "INFO")
+
 
 def send_telegram_notification(message, bot_token, chat_id, log_type="INFO"):
     """
@@ -213,6 +225,25 @@ def send_telegram_notification(message, bot_token, chat_id, log_type="INFO"):
         log_to_file(f"通知已發送: {message}", log_type)
     except requests.exceptions.RequestException as e:
         log_to_file(f"通知發送失敗: {e}", "ERROR")
+
+def refresh_access_token_periodically(headers):
+    """
+    自動每 30 分鐘刷新一次 Access Token。
+    """
+    global access_token
+    global token_expiry
+
+    if datetime.now() >= token_expiry:
+        log_to_file("Access Token 即將過期，正在刷新...")
+        access_token = get_valid_access_token()  # 使用原有的函數獲取新的 Access Token
+        if access_token:
+            headers['Authorization'] = f'Bearer {access_token}'
+            token_expiry = datetime.now() + timedelta(minutes=30)
+            log_to_file("Access Token 刷新成功。")
+        else:
+            log_to_file("刷新 Access Token 失敗，請檢查憑證或網絡連線。", "ERROR")
+            exit(1)
+
 
 if __name__ == "__main__":
 
