@@ -58,15 +58,23 @@ def get_stock_price(api_key, symbol, retries=3):
     url = f"https://finnhub.io/api/v1/quote?symbol={symbol}&token={api_key}"
     for attempt in range(retries):
         try:
-            response = requests.get(url)
+            response = requests.get(url, timeout=10)
             response.raise_for_status()
             data = response.json()
             return data.get("c")  # 即時價格字段 "c"
+        except requests.exceptions.Timeout:
+            # 如果超過 10 秒都沒回應，就抓到 Timeout
+            log_to_file(f"{symbol} 價格查詢第 {attempt + 1} 次超時，重試中...")
+            if attempt < retries - 1:
+                time.sleep(2)  # 等待 2 秒後重試
+            else:
+                log_to_file(f"多次重試仍超時，無法獲取 {symbol} 的價格。", "ERROR")
+                return None
         except requests.exceptions.RequestException as e:
             log_to_file(f"查詢 {symbol} 價格時發生錯誤: {e}")
             if attempt < retries - 1:
                 log_to_file(f"重試第 {attempt + 1} 次...")
-                time.sleep(2)  # 等待 2 秒後重試
+                time.sleep(2)
             else:
                 log_to_file(f"多次重試失敗，無法獲取 {symbol} 的價格。", "ERROR")
                 return None
@@ -75,44 +83,62 @@ def get_positions_and_cash(BASE_URL, headers, finnhub_api_key):
     """
     查詢帳戶持倉及現金餘額，返回結構化數據供交易策略使用。
     """
-    params = {'fields': 'positions'}
-    response = requests.get(f'{BASE_URL}/accounts', headers=headers, params=params)
+    log_to_file("進入 get_positions_and_cash 函式...")
+    try:
 
-    if response.status_code == 200:
-        accounts_data = response.json()
-        total_cash_balance = 0.0
-        holdings = []
+        params = {'fields': 'positions'}
+        log_to_file("準備呼叫 /accounts API...")
 
-        for account in accounts_data:
-            account_info = account.get('securitiesAccount', {})
-            cash_balance = account_info.get('currentBalances', {}).get('cashBalance', 0.0)
-            total_cash_balance += cash_balance
+        response = requests.get(f'{BASE_URL}/accounts', headers=headers, params=params, timeout=10)
+        log_to_file(f"/accounts API 回應結束, status_code={response.status_code}")
 
-            positions = account_info.get('positions', [])
-            for position in positions:
-                symbol = position['instrument'].get('symbol', None)
-                quantity = position.get('longQuantity', 0.0)
-                average_price = position.get('averagePrice', 0.0)
-                current_price = get_stock_price(finnhub_api_key, symbol)
-                if current_price is not None and average_price > 0:
-                    profit_percent = ((current_price - average_price) / average_price * 100)
-                else:
-                    profit_percent = None
 
-                if symbol and quantity > 0:
-                    holdings.append({
-                        "symbol": symbol,
-                        "quantity": quantity,
-                        "average_price": average_price,
-                        "current_price": current_price,
-                        "market_value": quantity * current_price if current_price else 0.0,
-                        "profit_percent": profit_percent
-                    })
+        if response.status_code == 200:
+            accounts_data = response.json()
+            total_cash_balance = 0.0
+            holdings = []
 
-        log_to_file(f"成功獲取帳戶數據: 現金餘額 ${total_cash_balance:.2f}")
-        return total_cash_balance, holdings
-    else:
-        log_to_file(f"查詢帳戶及持倉失敗，錯誤代碼: {response.status_code}, 錯誤信息: {response.text}", "ERROR")
+            for account in accounts_data:
+                account_info = account.get('securitiesAccount', {})
+                cash_balance = account_info.get('currentBalances', {}).get('cashBalance', 0.0)
+                total_cash_balance += cash_balance
+
+                positions = account_info.get('positions', [])
+                for position in positions:
+                    symbol = position['instrument'].get('symbol', None)
+                    quantity = position.get('longQuantity', 0.0)
+                    average_price = position.get('averagePrice', 0.0)
+
+                    # 查詢價格前再記錄一下
+                    log_to_file(f"查詢 {symbol} 即時價格前...")
+                    current_price = get_stock_price(finnhub_api_key, symbol)
+                    log_to_file(f"{symbol} 即時價格查詢完成: {current_price}")
+
+
+                    if current_price is not None and average_price > 0:
+                        profit_percent = ((current_price - average_price) / average_price * 100)
+                    else:
+                        profit_percent = None
+
+                    if symbol and quantity > 0:
+                        holdings.append({
+                            "symbol": symbol,
+                            "quantity": quantity,
+                            "average_price": average_price,
+                            "current_price": current_price,
+                            "market_value": quantity * current_price if current_price else 0.0,
+                            "profit_percent": profit_percent
+                        })
+            log_to_file(f"成功獲取帳戶數據: 現金餘額 ${total_cash_balance:.2f}")
+            return total_cash_balance, holdings
+        else:
+            log_to_file(f"查詢帳戶及持倉失敗，錯誤代碼: {response.status_code}, 錯誤信息: {response.text}", "ERROR")
+            return 0.0, []
+    except requests.exceptions.Timeout:
+        log_to_file("查詢帳戶及持倉時超時，請檢查 API 或網路環境。", "ERROR")
+        return 0.0, []
+    except Exception as e:
+        log_to_file(f"get_positions_and_cash 遇到未預期錯誤: {e}", "ERROR")
         return 0.0, []
 
 def place_order_simulated(BASE_URL, headers, account_hash, symbol, quantity, price):
@@ -151,11 +177,17 @@ def live_trade_strategy(BASE_URL, headers, account_hash, finnhub_api_key, symbol
     previous_prices = []  # 保存最近 3 次價格
     try:
         while True:
+            log_to_file("準備呼叫 refresh_access_token_periodically...")
             # **刷新 Token**
             refresh_access_token_periodically(headers)
+            log_to_file("refresh_access_token_periodically 完成")
 
+            # 在呼叫前
+            log_to_file("準備呼叫 get_positions_and_cash...")
             # 獲取現金與持倉數據
             cash, holdings = get_positions_and_cash(BASE_URL, headers, finnhub_api_key)
+            # 呼叫後
+            log_to_file(f"get_positions_and_cash 完成, 現金餘額={cash}, holdings={holdings}")
 
             # 找到目標股票的持倉
             symbol_holdings = next((h for h in holdings if h['symbol'].lower() == symbol.lower()), None)
@@ -178,12 +210,14 @@ def live_trade_strategy(BASE_URL, headers, account_hash, finnhub_api_key, symbol
                 use_moving_stop_loss = False
                 log_to_file(f"仍使用固定止損模式。")
 
+            log_to_file(f"準備呼叫 get_stock_price for {symbol}...")
             # 獲取當前股票價格
             current_price = get_stock_price(finnhub_api_key, symbol)
             if current_price is None:
                 log_to_file(f"無法獲取 {symbol} 的即時價格，跳過此次檢查。")
                 time.sleep(30)
                 continue
+            log_to_file(f"get_stock_price 完成, current_price={current_price}")
 
             # **檢查價格是否未變動 3 次**
             previous_prices.append(current_price)
@@ -247,7 +281,7 @@ def live_trade_strategy(BASE_URL, headers, account_hash, finnhub_api_key, symbol
                     log_to_file(f"加碼失敗: {result.get('error')}", "ERROR")
 
             log_to_file("等待下一次價格檢查...")
-            time.sleep(30)
+            time.sleep(60)
 
     except KeyboardInterrupt:
         log_to_file("策略被手動中止。")
