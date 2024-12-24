@@ -64,7 +64,7 @@ def cancel_order(base_url, headers, account_hash, order_id):
         return False
 
 
-def cancel_all_orders(base_url, headers, account_hash, limit=10):
+def cancel_all_orders(base_url, headers, account_hash, limit=50):
     """
     取消所有目前的訂單，加入狀態檢查和限量
     """

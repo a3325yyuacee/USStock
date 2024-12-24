@@ -17,6 +17,18 @@ if not appKey or not appSecret:
 
 TOKEN_FILE = "tokens.json"
 
+def log_to_file(message, log_type="INFO"):
+    """
+    改進的日誌記錄函數。
+    :param message: 日誌消息
+    :param log_type: 日誌類型，例如 "INFO", "ERROR", "TRADE"
+    """
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    formatted_message = f"[{timestamp}] [{log_type}] {message}"
+    with open("trade_log.txt", "a") as log_file:
+        log_file.write(formatted_message + "\n")
+    print(formatted_message)
+
 def authenticate_user():
     """
     用戶授權以取得 access_token 和 refresh_token。
@@ -92,23 +104,38 @@ def refresh_access_token():
 
 def get_valid_access_token():
     """
-    檢查 access_token 是否有效，若無效則自動更新。
+    檢查 Access Token 是否有效，若無效則使用 Refresh Token 更新。
     """
     try:
         with open(TOKEN_FILE, "r") as f:
-            tokens = json.load(f)
+            tokens = json.load(f)  # 嘗試讀取 JSON 文件
     except FileNotFoundError:
-        print("無法找到 tokens.json 文件，請先執行 authenticate_user")
-        exit(1)
+        log_to_file("無法找到 tokens.json 文件，請先執行 authenticate_user", "ERROR")
+        return None
+    except json.JSONDecodeError:
+        log_to_file("tokens.json 文件格式錯誤，請檢查文件內容或重新生成", "ERROR")
+        return None
+
+    # 檢查讀取結果是否為字典
+    if not isinstance(tokens, dict):
+        log_to_file("tokens.json 文件內容無效，應為字典格式。", "ERROR")
+        return None
 
     expires_at = tokens.get('expires_at')
     if expires_at and datetime.utcnow() < datetime.fromisoformat(expires_at):
-        # 如果 access_token 還有效
+        # 如果 Access Token 還有效，直接返回
         return tokens['access_token']
     else:
-        # access_token 過期，使用 refresh_token 更新
-        print("Access token 已過期，正在更新...")
-        return refresh_access_token()
+        log_to_file("Access Token 已過期，嘗試使用 Refresh Token 更新...")
+        new_access_token = refresh_access_token()  # 刷新 Access Token
+        if new_access_token:
+            log_to_file("使用 Refresh Token 成功更新 Access Token。")
+            return new_access_token
+        else:
+            log_to_file("使用 Refresh Token 更新 Access Token 失敗，請檢查憑證或網絡連線。", "ERROR")
+            return None
+
+
 
 
 if __name__ == "__main__":

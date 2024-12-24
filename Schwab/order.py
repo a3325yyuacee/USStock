@@ -19,24 +19,35 @@ def get_account_hash(base_url, headers):
         print("無法取得加密帳號")
         print(response.text)
         exit(1)
-
-def place_order(base_url, headers, account_hash, symbol, quantity, price):
+def log_to_file(message, log_type="INFO"):
     """
-    下單功能
+    改進的日誌記錄函數。
+    :param message: 日誌消息
+    :param log_type: 日誌類型，例如 "INFO", "ERROR", "TRADE"
+    """
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    formatted_message = f"[{timestamp}] [{log_type}] {message}"
+    with open("trade_log.txt", "a") as log_file:
+        log_file.write(formatted_message + "\n")
+    print(formatted_message)
+
+def place_order(base_url, headers, account_hash, symbol, quantity, price, action="BUY"):
+    """
+    通用下單功能，支持買入 (BUY) 或賣出 (SELL)。
     """
     order = {
-        "orderType": "LIMIT",                # 限價單
-        "session": "NORMAL",                 # 常規交易時段
-        "duration": "DAY",                   # 當日有效
-        "orderStrategyType": "SINGLE",       # 單筆交易
-        "price": str(price),                 # 下單價格
+        "orderType": "LIMIT",
+        "session": "NORMAL",
+        "duration": "DAY",
+        "orderStrategyType": "SINGLE",
+        "price": str(price),
         "orderLegCollection": [
             {
-                "instruction": "BUY",        # 買入
-                "quantity": quantity,        # 買入數量
+                "instruction": action,  # BUY 或 SELL
+                "quantity": abs(quantity),  # 確保數量為正
                 "instrument": {
-                    "symbol": symbol,        # 股票代號
-                    "assetType": "EQUITY"    # 資產類型
+                    "symbol": symbol,
+                    "assetType": "EQUITY"
                 }
             }
         ]
@@ -49,14 +60,12 @@ def place_order(base_url, headers, account_hash, symbol, quantity, price):
     )
 
     if response.status_code == 201:
-        print("下單成功")
-        order_id = response.headers.get('location', '/').split('/')[-1]
-        print(f"訂單編號：{order_id}")
-        return order_id
+        log_to_file(f"下單成功: {action} {quantity} 股 {symbol} @ ${price:.2f}")
+        return {"status": "success", "order_id": response.headers.get('location', '/').split('/')[-1]}
     else:
-        print("下單失敗")
-        print(response.text)
-        exit(1)
+        log_to_file(f"下單失敗: {response.text}", "ERROR")
+        return {"status": "error", "error": response.text}
+
 
 def check_order_status(base_url, headers, account_hash, order_id):
     """
@@ -96,8 +105,8 @@ def get_all_orders(base_url, headers, max_results=100, status=None, from_date=No
     """
     查詢所有帳戶的訂單，支援多種篩選條件
     """
-    from_date = format_date(from_date)
-    to_date = format_date(to_date)
+    # from_date = format_date(from_date)
+    # to_date = format_date(to_date)
 
     params = {
         "maxResults": max_results,

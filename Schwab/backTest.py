@@ -9,9 +9,9 @@ from datetime import timedelta
 load_dotenv()
 
 # Constants
-INITIAL_CASH = 15000
-BUY_AMOUNT = 500
-STOP_LOSS = 500  # 固定止損值
+INITIAL_CASH = 2000
+BUY_AMOUNT = 200
+STOP_LOSS = 200  # 固定止損值
 
 # '1d', '5d', '1mo', '3mo', '6mo', '1y', '2y', '5y', '10y', 'ytd', 'max'
 def fetch_historical_data(symbol, period='5y'):
@@ -111,7 +111,7 @@ def backtest_strategy(data):
 
 if __name__ == "__main__":
     # 載入數據
-    symbol = "TSLA"
+    symbol = "TSLL"
     data = fetch_historical_data(symbol)
     print("Successfully loaded historical data")
 
