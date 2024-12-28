@@ -1,144 +1,103 @@
 import requests
-import math
 import time
+import math
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 import os
 
+# 模擬交易相關
+from auth import get_valid_access_token
+from order import place_order, get_account_hash
+from live_trading import get_positions_and_cash, live_trade_strategy, get_stock_price
+
 # 加載環境變量
 load_dotenv()
 
+# 常量配置
 FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY")
+if not FINNHUB_API_KEY:
+    print("錯誤: 未配置 FINNHUB_API_KEY。請在 .env 文件中設置該值。")
+    exit(1)
+
 BASE_URL = "https://api.schwabapi.com/trader/v1/"
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+BUY_AMOUNT = 200
+STOP_LOSS = 200
+MAX_TRADES = 3  # 最大交易次數
+SIMULATED = False  # 模擬交易開關
 
-# 常量
-BUY_AMOUNT = 500
-STOP_LOSS_PERCENT = 0.95  # 止損比例
-ADD_PERCENT = 1.05  # 加碼比例
-CHECK_INTERVAL = 30  # 檢查間隔（秒）
+# BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+# CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+# if not BOT_TOKEN or not CHAT_ID:
+#     print("警告: 未配置 Telegram 通知參數，將跳過通知功能。")
 
-def log_to_file(message, log_type="INFO"):
-    """日誌記錄功能"""
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    formatted_message = f"[{timestamp}] [{log_type}] {message}"
-    with open("trade_log.txt", "a") as log_file:
-        log_file.write(formatted_message + "\n")
-    print(formatted_message)
-
-
-def send_telegram_notification(message):
-    """發送 Telegram 通知"""
-    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-        log_to_file("未配置 Telegram 通知參數，跳過通知。", "WARNING")
-        return
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    data = {"chat_id": TELEGRAM_CHAT_ID, "text": message}
-    try:
-        response = requests.post(url, data=data)
-        response.raise_for_status()
-        log_to_file(f"通知已發送: {message}")
-    except requests.RequestException as e:
-        log_to_file(f"通知發送失敗: {e}", "ERROR")
-
-
-def get_stock_price(symbol):
-    """透過 Finnhub API 獲取即時股票價格"""
-    url = f"https://finnhub.io/api/v1/quote?symbol={symbol}&token={FINNHUB_API_KEY}"
-    try:
-        response = requests.get(url)
-        response.raise_for_status()
-        data = response.json()
-        return data.get("c")  # 即時價格字段 "c"
-    except requests.RequestException as e:
-        log_to_file(f"獲取 {symbol} 價格失敗: {e}", "ERROR")
-        return None
-
-
-def place_order(base_url, headers, account_hash, symbol, quantity, price, action):
-    """執行真實下單功能"""
-    order = {
-        "account_hash": account_hash,
-        "symbol": symbol,
-        "quantity": quantity,
-        "price": price,
-        "action": action  # "BUY" 或 "SELL"
-    }
-    try:
-        url = f"{base_url}accounts/{account_hash}/orders"
-        log_to_file(f"發送請求至 {url}，請求內容: {order}")
-        response = requests.post(url, headers=headers, json=order)
-        response.raise_for_status()
-        log_to_file(f"{action} 下單成功: {quantity} 股 {symbol} @ ${price:.2f}")
-        return response.json()
-    except requests.RequestException as e:
-        log_to_file(f"{action} 下單失敗: {e}, 返回內容: {e.response.text if e.response else '無內容'}", "ERROR")
-        return None
-
-
-def live_trade_strategy(base_url, headers, account_hash, symbol, buy_amount, stop_loss_percent, add_percent):
-    """即時交易策略，僅執行實際交易"""
-    log_to_file(f"啟動交易策略，監控 {symbol} 價格...")
-    cash = buy_amount  # 初始現金
-    holdings = 0  # 初始持倉
-    avg_price = 0  # 平均價格
-
-    try:
-        while True:
-            current_price = get_stock_price(symbol)
-            if current_price is None:
-                time.sleep(CHECK_INTERVAL)
-                continue
-
-            log_to_file(f"目前價格: ${current_price:.2f}")
-
-            # 初次買入
-            if holdings == 0:
-                shares_to_buy = math.floor(cash / current_price)
-                avg_price = current_price
-                holdings = shares_to_buy
-                cash -= shares_to_buy * current_price
-
-                place_order(base_url, headers, account_hash, symbol, shares_to_buy, avg_price, "BUY")
-                log_to_file(f"首次買入 {shares_to_buy} 股 {symbol} @ ${avg_price:.2f}")
-
-            # 止損邏輯
-            stop_loss_price = avg_price * stop_loss_percent
-            if current_price <= stop_loss_price:
-                log_to_file(f"觸發止損條件: 當前價格 ${current_price:.2f} <= 止損價格 ${stop_loss_price:.2f}")
-                place_order(base_url, headers, account_hash, symbol, holdings, current_price, "SELL")
-                cash += holdings * current_price
-                log_to_file(f"賣出 {holdings} 股 {symbol}，現金餘額 ${cash:.2f}")
-                holdings = 0
-                break
-
-            # 加碼邏輯
-            if current_price >= avg_price * add_percent and cash >= buy_amount:
-                shares_to_buy = math.floor(buy_amount / current_price)
-                avg_price = (avg_price * holdings + current_price * shares_to_buy) / (holdings + shares_to_buy)
-                holdings += shares_to_buy
-                cash -= shares_to_buy * current_price
-
-                place_order(base_url, headers, account_hash, symbol, shares_to_buy, current_price, "BUY")
-                log_to_file(f"加碼買入 {shares_to_buy} 股 {symbol}，新平均價格 ${avg_price:.2f}")
-
-            time.sleep(CHECK_INTERVAL)
-
-    except KeyboardInterrupt:
-        log_to_file("策略被手動中止")
-        log_to_file(f"最終現金餘額: ${cash:.2f}, 最終持倉: {holdings} 股")
-
+# 初始化交易次數
+trade_count = 0
+# 初始化 Token 過期時間
+token_expiry = datetime.now() + timedelta(minutes=30)
+last_add_price = 0  # 記錄最後一次加碼時的價格
+last_order_time = datetime.min  # 初始化為最小時間
+cooldown_seconds = 60  # 設置冷卻時間為 60 秒
 
 if __name__ == "__main__":
-    # 初始化帳戶與認證
-    ACCESS_TOKEN = os.getenv("ACCESS_TOKEN")
-    ACCOUNT_HASH = os.getenv("ACCOUNT_HASH")
+    access_token = get_valid_access_token()
+    headers = {'Authorization': f'Bearer {access_token}'}
+    account_hash = get_account_hash(BASE_URL, headers)  # 獲取帳戶標識
+    if not access_token:
+        print("錯誤: 無法獲取 Access Token。")
+        exit(1)
 
-    HEADERS = {
-        "Authorization": f"Bearer {ACCESS_TOKEN}",
-        "Content-Type": "application/json"
-    }
+    if not account_hash:
+        print("錯誤: 無法獲取 Account Hash。")
+        exit(1)
 
-    SYMBOL = "TQQQ"  # 設定目標股票代號
-    live_trade_strategy(BASE_URL, HEADERS, ACCOUNT_HASH, SYMBOL, BUY_AMOUNT, STOP_LOSS_PERCENT, ADD_PERCENT)
+    # 初始化
+    # send_telegram_notification("交易腳本已啟動", BOT_TOKEN, CHAT_ID)
+
+    # 使用新的函數初始化現金和持倉數據
+    print("初始化帳戶數據...")
+    cash, holdings = get_positions_and_cash(BASE_URL, headers, FINNHUB_API_KEY)
+    print(f"現金餘額: ${cash:.2f}")
+    print("持倉數據:")
+    for holding in holdings:
+        print(f"股票代號: {holding['symbol']}, 持股數量: {holding['quantity']:.2f}, 平均成本: ${holding['average_price']:.2f}")
+    if cash is None or holdings is None:
+        print("錯誤: 獲取帳戶數據失敗。")
+        exit(1)
+
+    # 啟動交易模式
+    print("\n請選擇當前狀態:")
+    print("1: 沒有訂單，執行首次下單")
+    print("2: 跳過下單，直接進入價格監控")
+    choice = input("輸入選項 (1 或 2): ")
+
+    if choice == "1":
+        # 首次下單邏輯
+        symbol = input("請輸入首次下單的股票代號: ").upper()
+        current_price = get_stock_price(FINNHUB_API_KEY, symbol)
+
+        if current_price is None:
+            print("無法獲取股票價格，無法執行首次下單。")
+            exit(1)
+
+        shares_to_buy = math.ceil(BUY_AMOUNT / current_price)
+        print(f"準備下單: {shares_to_buy} 股，價格 ${current_price:.2f}")
+
+        # 執行下單
+        order_id = place_order(BASE_URL, headers, account_hash, symbol, shares_to_buy, current_price)
+        if order_id:
+            print(f"首次下單成功，訂單編號: {order_id}")
+        else:
+            print("首次下單失敗，請檢查問題。")
+
+        # 下單後結束程式
+        exit(0)
+
+    elif choice == "2":
+        # 跳過首次下單，直接進入價格監控
+        symbol = input("請輸入需要監控的股票代號: ").upper()
+        print("跳過首次下單，直接進入價格監控模式。")
+        live_trade_strategy(BASE_URL, headers, account_hash, FINNHUB_API_KEY, symbol)
+
+    else:
+        print("無效選項，請重新運行腳本並選擇 1 或 2。")
+        exit(1)

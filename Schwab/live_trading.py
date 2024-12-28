@@ -83,11 +83,11 @@ def get_positions_and_cash(BASE_URL, headers, finnhub_api_key):
     """
     查詢帳戶持倉及現金餘額，返回結構化數據供交易策略使用。
     """
-    log_to_file("進入 get_positions_and_cash 函式...")
+    # log_to_file("進入 get_positions_and_cash 函式...")
     try:
 
         params = {'fields': 'positions'}
-        log_to_file("準備呼叫 /accounts API...")
+        # log_to_file("準備呼叫 /accounts API...")
 
         response = requests.get(f'{BASE_URL}/accounts', headers=headers, params=params, timeout=10)
         log_to_file(f"/accounts API 回應結束, status_code={response.status_code}")
@@ -110,9 +110,9 @@ def get_positions_and_cash(BASE_URL, headers, finnhub_api_key):
                     average_price = position.get('averagePrice', 0.0)
 
                     # 查詢價格前再記錄一下
-                    log_to_file(f"查詢 {symbol} 即時價格前...")
+                    # log_to_file(f"查詢 {symbol} 即時價格前...")
                     current_price = get_stock_price(finnhub_api_key, symbol)
-                    log_to_file(f"{symbol} 即時價格查詢完成: {current_price}")
+                    # log_to_file(f"{symbol} 即時價格查詢完成: {current_price}")
 
 
                     if current_price is not None and average_price > 0:
@@ -141,23 +141,23 @@ def get_positions_and_cash(BASE_URL, headers, finnhub_api_key):
         log_to_file(f"get_positions_and_cash 遇到未預期錯誤: {e}", "ERROR")
         return 0.0, []
 
-def place_order_simulated(BASE_URL, headers, account_hash, symbol, quantity, price):
-    """模擬下單功能，用於測試環境。"""
-    if SIMULATED:
-        log_to_file(f"[模擬交易] 下單指令：Symbol={symbol}, Shares={quantity}, Price=${price:.2f}")
-        return {"status": "simulated", "symbol": symbol, "quantity": quantity, "price": price}
-    else:
-        return place_order(BASE_URL, headers, account_hash, symbol, quantity, price)
+# def place_order_simulated(BASE_URL, headers, account_hash, symbol, quantity, price):
+#     """模擬下單功能，用於測試環境。"""
+#     if SIMULATED:
+#         log_to_file(f"[模擬交易] 下單指令：Symbol={symbol}, Shares={quantity}, Price=${price:.2f}")
+#         return {"status": "simulated", "symbol": symbol, "quantity": quantity, "price": price}
+#     else:
+#         return place_order(BASE_URL, headers, account_hash, symbol, quantity, price)
 
-def can_execute_trade(required_cash, cash_balance, trade_count):
-    """確認是否允許執行交易。"""
-    if trade_count >= MAX_TRADES:
-        log_to_file("達到最大交易次數限制，停止交易。")
-        return False
-    if required_cash > cash_balance:
-        log_to_file(f"現金不足，無法交易。需要 ${required_cash:.2f}，現金餘額 ${cash_balance:.2f}。")
-        return False
-    return True
+# def can_execute_trade(required_cash, cash_balance, trade_count):
+#     """確認是否允許執行交易。"""
+#     if trade_count >= MAX_TRADES:
+#         log_to_file("達到最大交易次數限制，停止交易。")
+#         return False
+#     if required_cash > cash_balance:
+#         log_to_file(f"現金不足，無法交易。需要 ${required_cash:.2f}，現金餘額 ${cash_balance:.2f}。")
+#         return False
+#     return True
 
 
 def live_trade_strategy(BASE_URL, headers, account_hash, finnhub_api_key, symbol):
@@ -187,7 +187,7 @@ def live_trade_strategy(BASE_URL, headers, account_hash, finnhub_api_key, symbol
             # 獲取現金與持倉數據
             cash, holdings = get_positions_and_cash(BASE_URL, headers, finnhub_api_key)
             # 呼叫後
-            log_to_file(f"get_positions_and_cash 完成, 現金餘額={cash}, holdings={holdings}")
+            log_to_file(f"get_positions_and_cash 完成, 現金餘額={cash}")
 
             # 找到目標股票的持倉
             symbol_holdings = next((h for h in holdings if h['symbol'].lower() == symbol.lower()), None)
@@ -200,7 +200,7 @@ def live_trade_strategy(BASE_URL, headers, account_hash, finnhub_api_key, symbol
             quantity = symbol_holdings['quantity']
             entry_price = symbol_holdings['average_price']
             # 設置加碼目標價格和止損條件
-            target_add_price = entry_price * 1.05  # 5% 加碼
+            target_add_price = entry_price * 1.1  # 5% 加碼
 
             # 判斷是否啟用移動止損
             if quantity * entry_price > 2 * BUY_AMOUNT:
@@ -287,22 +287,22 @@ def live_trade_strategy(BASE_URL, headers, account_hash, finnhub_api_key, symbol
         log_to_file("策略被手動中止。")
 
 
-def send_telegram_notification(message, BOT_TOKEN, CHAT_ID, log_type="INFO"):
-    """
-    使用 Telegram 發送通知，並記錄到日誌。
-    :param message: 發送的消息內容
-    :param bot_token: Telegram Bot 的 API Token
-    :param chat_id: 接收消息的聊天 ID
-    :param log_type: 日誌類型，例如 "INFO", "ERROR", "TRADE"
-    """
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    data = {"chat_id": CHAT_ID, "text": message}
-    try:
-        response = requests.post(url, data=data)
-        response.raise_for_status()
-        log_to_file(f"通知已發送: {message}", log_type)
-    except requests.exceptions.RequestException as e:
-        log_to_file(f"通知發送失敗: {e}", "ERROR")
+# def send_telegram_notification(message, BOT_TOKEN, CHAT_ID, log_type="INFO"):
+#     """
+#     使用 Telegram 發送通知，並記錄到日誌。
+#     :param message: 發送的消息內容
+#     :param bot_token: Telegram Bot 的 API Token
+#     :param chat_id: 接收消息的聊天 ID
+#     :param log_type: 日誌類型，例如 "INFO", "ERROR", "TRADE"
+#     """
+#     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+#     data = {"chat_id": CHAT_ID, "text": message}
+#     try:
+#         response = requests.post(url, data=data)
+#         response.raise_for_status()
+#         log_to_file(f"通知已發送: {message}", log_type)
+#     except requests.exceptions.RequestException as e:
+#         log_to_file(f"通知發送失敗: {e}", "ERROR")
 
 
 def refresh_access_token_periodically(headers):
@@ -359,7 +359,7 @@ if __name__ == "__main__":
         exit(1)
 
     # 初始化
-    send_telegram_notification("交易腳本已啟動", BOT_TOKEN, CHAT_ID)
+    # send_telegram_notification("交易腳本已啟動", BOT_TOKEN, CHAT_ID)
 
     # 使用新的函數初始化現金和持倉數據
     print("初始化帳戶數據...")
