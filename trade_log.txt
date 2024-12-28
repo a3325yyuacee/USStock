@@ -20579,3 +20579,19 @@
 [2024-12-28 13:54:43] [INFO] get_stock_price 完成, current_price=31.6
 [2024-12-28 13:54:43] [INFO] TSLL 價格連續 3 次未變動，跳過此次檢查。
 [2024-12-28 13:54:48] [INFO] 策略被手動中止。
+[2024-12-28 14:04:02] [INFO] Access Token 已過期，嘗試使用 Refresh Token 更新...
+[2024-12-28 14:04:04] [INFO] 使用 Refresh Token 成功更新 Access Token。
+[2024-12-28 14:04:05] [INFO] /accounts API 回應結束, status_code=200
+[2024-12-28 14:04:09] [INFO] 成功獲取帳戶數據: 現金餘額 $6845.25
+[2024-12-28 14:04:13] [INFO] 開始監控股票: TSLL
+[2024-12-28 14:04:13] [INFO] 準備呼叫 refresh_access_token_periodically...
+[2024-12-28 14:04:13] [INFO] refresh_access_token_periodically 完成
+[2024-12-28 14:04:13] [INFO] 準備呼叫 get_positions_and_cash...
+[2024-12-28 14:04:14] [INFO] /accounts API 回應結束, status_code=200
+[2024-12-28 14:04:18] [INFO] 成功獲取帳戶數據: 現金餘額 $6845.25
+[2024-12-28 14:04:18] [INFO] get_positions_and_cash 完成, 現金餘額=6845.25
+[2024-12-28 14:04:18] [INFO] 仍使用固定止損模式。
+[2024-12-28 14:04:18] [INFO] 準備呼叫 get_stock_price for TSLL...
+[2024-12-28 14:04:19] [INFO] get_stock_price 完成, current_price=31.6
+[2024-12-28 14:04:19] [INFO] TSLL 價格連續 3 次未變動，跳過此次檢查。
+[2024-12-28 14:04:21] [INFO] 策略被手動中止。

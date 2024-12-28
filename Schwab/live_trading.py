@@ -1,10 +1,11 @@
 import requests
 import time
 import math
+import os
+import json
+
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
-import os
-
 # 模擬交易相關
 from auth import get_valid_access_token
 from order import place_order, get_account_hash
@@ -23,6 +24,8 @@ BUY_AMOUNT = 200
 STOP_LOSS = 200
 MAX_TRADES = 3  # 最大交易次數
 SIMULATED = False  # 模擬交易開關
+TOKEN_FILE = "tokens.json"
+
 
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
